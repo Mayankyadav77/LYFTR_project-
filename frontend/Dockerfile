@@ -5,6 +5,12 @@ FROM node:20-alpine as builder
 
 WORKDIR /app
 
+# Accept build arguments for Vite environment variables
+ARG VITE_API_URL=https://lyftr-project.onrender.com
+ARG VITE_API_BASE_URL=https://lyftr-project.onrender.com
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 COPY package*.json ./
 RUN npm ci
 

@@ -15,7 +15,23 @@ import {
   Zap
 } from 'lucide-react';
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+function getApiBaseUrl() {
+  // Check runtime window configuration, then Vite env variables, fallback to backend production URL on render, or localhost
+  if (typeof window !== 'undefined' && window.__LYFTR_API_URL__) {
+    return window.__LYFTR_API_URL__.replace(/\/+$/, '');
+  }
+  const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
+  if (envUrl && envUrl.trim() && !envUrl.includes('localhost:8000')) {
+    return envUrl.trim().replace(/\/+$/, '');
+  }
+  // When running on Render frontend (onrender.com), default to the sibling backend service
+  if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {
+    return 'https://lyftr-project.onrender.com';
+  }
+  return (envUrl || 'http://localhost:8000').replace(/\/+$/, '');
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 function generateSessionId() {
   return 's-' + Math.random().toString(36).substring(2, 10);
