@@ -183,9 +183,11 @@ class LLMService:
                     }
                 }
 
-            except Exception as e:
-                err_str = str(e).lower()
-                status_code = getattr(e, "status_code", None)
+                        except Exception as e:
+                print(
+                    f"LLM failure on {key_id}: {type(e).__name__}: {e}",
+                    flush=True
+                )
                 fallback_attempts += 1
                 last_error = e
                 continue
