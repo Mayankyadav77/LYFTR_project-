@@ -1,39 +1,29 @@
-# Multi-stage Dockerfile for FastAPI Backend (Production & Render compatible)
-
-# Stage 1: Build & Dependencies
-FROM python:3.11-slim as builder
+# Production Dockerfile for FastAPI Backend on Render / Cloud platforms
+FROM python:3.11-slim
 
 WORKDIR /app
 
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# Install python dependencies directly to system environment
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Stage 2: Final Runtime
-FROM python:3.11-slim as runner
+# Create /data directory for persistent SQLite database
+RUN mkdir -p /data && chmod 777 /data
 
-WORKDIR /app
+# Copy application source code
+COPY app/ ./app/
 
-# Create a non-root user and /data directory for SQLite volume
-RUN addgroup --system appgroup && adduser --system --group appuser \
-    && mkdir -p /data && chown -R appuser:appgroup /data
-
-# Copy installed python dependencies from builder
-COPY --from=builder /root/.local /home/appuser/.local
-
-ENV PATH=/home/appuser/.local/bin:$PATH \
-    PYTHONUNBUFFERED=1 \
+ENV PYTHONUNBUFFERED=1 \
     DATABASE_URL=sqlite:////data/app.db \
     PORT=8000
 
-COPY app/ ./app/
-
-USER appuser
-
 EXPOSE 8000
 
-# Run with shell form so $PORT is evaluated dynamically by Render
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Execute uvicorn via python -m with dynamic PORT evaluation
+CMD ["sh", "-c", "python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
