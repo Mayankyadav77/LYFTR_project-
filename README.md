@@ -5,9 +5,9 @@ A production-ready full-stack AI chatbot built with **React + Vite**, **FastAPI*
 ---
 
 ## 1. Live URLs
-- **Frontend Live URL**: `https://lyftr-ai-frontend.vercel.app` (or configured deployment URL)
-- **Backend Live URL**: `https://lyftr-ai-backend.onrender.com` (or configured deployment URL)
-- **GitHub Repository**: `https://github.com/<username>/lyftr-ai`
+- **Frontend Live URL**: `https://<your-project>.vercel.app`
+- **Backend Live URL**: `https://<your-service>.onrender.com`
+- **GitHub Repository**: `https://github.com/<username>/<repo-name>`
 
 ---
 
@@ -18,22 +18,21 @@ A production-ready full-stack AI chatbot built with **React + Vite**, **FastAPI*
 - Node.js 20+ & npm
 - Docker & Docker Compose (optional for containerized setup)
 
-### With Docker & Makefile (Recommended)
-1. Clone this repository and configure environment variables:
+### With Docker & Makefile
+1. Copy the example environment file:
    ```bash
    cp .env.example .env
-   # Add your Gemini API keys in .env
    ```
-2. Start the entire stack with Docker Compose:
+2. Start the services:
    ```bash
    make up
    ```
-3. Stop the services:
+   Or without Make:
    ```bash
-   make down
+   docker compose up -d --build
    ```
 - Frontend UI: [http://localhost:3000](http://localhost:3000)
-- Backend API & Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
+- Backend API: [http://localhost:8000](http://localhost:8000) (Docs: [http://localhost:8000/docs](http://localhost:8000/docs))
 
 ### Without Docker
 
@@ -41,9 +40,9 @@ A production-ready full-stack AI chatbot built with **React + Vite**, **FastAPI*
 ```bash
 cd backend
 python -m venv venv
-# On Windows:
+# Windows:
 .\venv\Scripts\activate
-# On Linux/macOS:
+# Linux/macOS:
 source venv/bin/activate
 
 pip install -r requirements.txt
@@ -61,73 +60,80 @@ cd frontend
 npm install
 npm run dev -- --port 3000
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## 3. Design Decisions
+## 3. Deployment Instructions
 
-### Key Fallback Mechanism
-- Configured via comma-separated list of keys in `LLM_API_KEYS` (parsed in order into `key_1`, `key_2`, ...).
-- On any HTTP 429, quota exhaustion, 5xx error, or simulated failure, the backend catches the error, increments `fallback_attempts`, and transparently routes to the next key in the pool.
-- If all configured keys fail, the backend returns a clean HTTP 503 `{"detail": "all providers unavailable"}` without adding the failed prompt to the database session history.
+### A. Deploy Backend to Render (FastAPI + Docker)
 
-### Response Caching
-- Enabled via LiteLLM's local cache engine.
-- Exact Cache Key Specification: `model` + the canonical full message list (system prompt + session history + new user message) hashed with SHA-256.
-- Cache hits return resolution source `LLM_CACHE` with zero fallback attempts and `key_id: null`. The reply matches the cached response verbatim and displays significantly lower latency.
-- Fresh generations return resolution source `LIVE_INFERENCE` alongside `key_id` and token counts.
-
-### SQLite Multi-turn Session Storage
-- Multi-turn conversation state is persisted per `session_id` in SQLite.
-- Standardized data model storing `session_id`, `role`, `content`, `metadata` (JSON serialized), and `created_at` timestamp.
-- Survives container restarts using Docker named volume mounted at `/data`.
-- Client only transmits the new message; the backend automatically retrieves earlier context from SQLite for the LLM prompt.
-
----
-
-## 4. Verification
-
-### Automated Verification
-Run the backend test suite covering health, validation errors (422), caching (LIVE_INFERENCE vs LLM_CACHE), key failover (X-Simulate-Failure), and session history (404 and 200):
-```bash
-pytest backend/tests -v
-```
-
-### Manual Verification via UI and API
-
-#### 1. Live Inference & Metadata Display
-- Send a message in the UI:
-  - Verify that `meta-source` displays `LIVE_INFERENCE`.
-  - Verify `meta-model`, `meta-latency`, `meta-input-tokens`, `meta-output-tokens`, and `key_id` are displayed.
-
-#### 2. Caching Verification
-- Open a new chat session (or click **New Chat**).
-- Send the exact same initial query as before.
-- Notice that `meta-source` transitions to `LLM_CACHE`, `key_id` is null, and latency drops significantly.
-
-#### 3. Failover Verification (`X-Simulate-Failure`)
-- In the sidebar under **X-Simulate-Failure Hook**, enter `key_1=429` and send a message.
-  - Notice the response succeeds with `key_id: key_2` and `fallback_attempts: 1`.
-- Enter `*=429` and send a message.
-  - Notice the UI renders a clean 503 error banner: `Error (503): all providers unavailable` without breaking the screen.
-
-#### 4. API Endpoints
-- `GET /health` -> `{"status": "ok", "keys_configured": 2, "cache_enabled": true}`
-- `POST /chat` -> `{ "session_id": "...", "reply": "...", "metadata": { ... } }`
-- `GET /sessions/{session_id}/messages` -> `{ "session_id": "...", "messages": [ ... ] }`
+1. **Push your repository to GitHub** (ensure `.env` is never committed; `.gitignore` is already set).
+2. Go to [Render Dashboard](https://dashboard.render.com/) and click **New +** -> **Web Service**.
+3. Select your repository.
+4. Configure the Web Service:
+   - **Name**: `lyftr-ai-backend` (or your choice)
+   - **Region**: Choose the closest region
+   - **Branch**: `master` (or `main`)
+   - **Root Directory**: `backend`
+   - **Runtime**: **Docker**
+5. **Attach Persistent Disk (Mandatory for SQLite)**:
+   - Scroll to **Disks** section and click **Add Disk**.
+   - **Name**: `sqlite_data`
+   - **Mount Path**: `/data`
+   - **Size**: 1 GB (sufficient for SQLite)
+6. **Set Environment Variables**:
+   In the **Environment Variables** tab, add:
+   | Key | Value | Description |
+   | :--- | :--- | :--- |
+   | `LLM_API_KEYS` | `AIzaSy...,AIzaSy...` | Comma-separated list of at least 2 real Gemini API keys |
+   | `LLM_MODEL` | `gemini/gemini-2.5-flash` | Gemini model name |
+   | `DATABASE_URL` | `sqlite:////data/app.db` | Points to SQLite inside the persistent disk |
+   | `ALLOWED_ORIGINS` | `*` or `https://<your-app>.vercel.app` | Frontend origin(s) permitted for CORS |
+   | `ENABLE_FAILURE_SIMULATION` | `true` | Required for failover demonstration |
+7. Click **Deploy Web Service**.
+8. Once live, test: `https://<your-render-service>.onrender.com/health`. It should return:
+   ```json
+   {"status": "ok", "keys_configured": 2, "cache_enabled": true}
+   ```
 
 ---
 
-## 5. Setup Used
-- **IDE**: Visual Studio Code / Antigravity IDE
-- **AI Assist**: Antigravity Full-Stack AI Engineer
-- **Environment**: Windows 11 & Linux (Docker Alpine / Slim)
+### B. Deploy Frontend to Vercel (React + Vite)
+
+1. Go to [Vercel Dashboard](https://vercel.com/) and click **Add New...** -> **Project**.
+2. Import the same GitHub repository.
+3. In **Configure Project**:
+   - **Framework Preset**: `Vite`
+   - **Root Directory**: Click edit and select `frontend`
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+4. **Set Environment Variables**:
+   Add this environment variable:
+   | Key | Value |
+   | :--- | :--- |
+   | `VITE_API_URL` | `https://<your-render-service>.onrender.com` |
+   *(Note: Do not include a trailing slash; the app automatically normalizes it).*
+5. Click **Deploy**.
+6. When deployment finishes, update the backend's `ALLOWED_ORIGINS` variable on Render to match your Vercel domain if you prefer strict origin matching (e.g. `https://lyftr-ai.vercel.app`).
 
 ---
 
-## 6. Bonus Features
-- **Simulation Hook Presets**: UI quick-action buttons to inject `key_1=429`, `key_1=500`, and `*=429` directly from the sidebar.
-- **Custom System Prompt**: Real-time adjustable system prompt per session via `data-testid="system-prompt-input"`.
-- **Live Health Status Card**: Sidebar badge providing real-time backend connectivity, key count, and cache status.
-- **Responsive Dark Theme UI**: Polished ChatGPT-style interface with smooth scrolling, error handling banners, and glowing badge indicators.
+## 4. Design Decisions
+- **Key Fallback Mechanism**: The backend parses `LLM_API_KEYS` sequentially (`key_1`, `key_2`, ...). On rate limits (HTTP 429), quota limits, or 5xx errors, it transparently retries on the next key without breaking the UI. When all keys fail, it returns HTTP 503 `{"detail": "all providers unavailable"}` without adding the failed query to SQLite history.
+- **Exact Caching**: LiteLLM local caching indexes a SHA-256 hash of `model` + the full message list (system prompt + history + new message). Cache hits return `LLM_CACHE`, `key_id: null`, and stored tokens.
+- **SQLite Storage**: Conversation turns are persisted in SQLite (`messages` table) mounted on `/data`, surviving server restarts and deployments.
+
+---
+
+## 5. Verification
+- **Automated Tests**: Run `pytest backend/tests -v`.
+- **Cache Hit Demonstration**: Send identical messages in two sessions; the second will return `LLM_CACHE` with zero fallback attempts.
+- **Failover Demonstration**: Send message with `X-Simulate-Failure: key_1=429` to observe fallback to `key_2`. Send `*=429` to observe clean HTTP 503 error handling.
+
+---
+
+## 6. Setup Used
+- IDE: Antigravity IDE / VS Code
+- AI Model: Gemini 2.5 Flash via LiteLLM Gateway
+- Frameworks: FastAPI (Python 3.11), React 18 + Vite (Node 20)

@@ -18,13 +18,13 @@ app = FastAPI(title="Lyftr AI Backend", version="1.0.0")
 
 # Setup CORS
 allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "*")
-origins = [o.strip() for o in allowed_origins_raw.split(",") if o.strip()]
-if not origins:
+origins = [o.strip().rstrip("/") for o in allowed_origins_raw.split(",") if o.strip()]
+if not origins or "*" in origins:
     origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins if "*" not in origins else ["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

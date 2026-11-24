@@ -1,4 +1,4 @@
-# Multi-stage Dockerfile for FastAPI Backend
+# Multi-stage Dockerfile for FastAPI Backend (Production & Render compatible)
 
 # Stage 1: Build & Dependencies
 FROM python:3.11-slim as builder
@@ -26,7 +26,8 @@ COPY --from=builder /root/.local /home/appuser/.local
 
 ENV PATH=/home/appuser/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
-    DATABASE_URL=sqlite:////data/app.db
+    DATABASE_URL=sqlite:////data/app.db \
+    PORT=8000
 
 COPY app/ ./app/
 
@@ -34,7 +35,5 @@ USER appuser
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=10s --timeout=5s --start-period=5s --retries=3 \
-  CMD python -c "import urllib.request; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').getcode() == 200 else 1)"
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run with shell form so $PORT is evaluated dynamically by Render
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
