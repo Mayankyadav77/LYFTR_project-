@@ -183,7 +183,7 @@ class LLMService:
                     }
                 }
 
-                        except Exception as e:
+                except Exception as e:
                 print(
                     f"LLM failure on {key_id}: {type(e).__name__}: {e}",
                     flush=True
